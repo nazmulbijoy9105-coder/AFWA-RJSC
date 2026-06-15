@@ -285,10 +285,13 @@ Guidelines for your response:
                 
                 console.log(`[Firebase Cloud Function] Recipient email for alert is: ${directorEmail}`);
                 
-                // 2. Draft a beautiful automated Swiss-style urgent statutory warning using Gemini-3.5-flash
+                // 2. Draft a beautiful automated Swiss-style urgent statutory warning using Gemini-3.5-flash with a deep link
                 const emailSubject = `🚨 IMMEDIATE ACTION REQUIRED: 'RED' Severity Compliance Default at ${companyName}`;
                 let emailBody = "";
                 
+                const baseUrl = process.env.APP_URL || "https://ais-pre-cnig3iwv3lsd7cmhndklpd-473976782025.asia-southeast1.run.app";
+                const auditLink = `${baseUrl}/?tab=trail&id=${data.id}&companyId=${data.companyId}`;
+
                 try {
                   const ai = getAi();
                   const prompt = `You are an automated corporate compliance officer robot acting as a background Firebase Cloud Function for Bangladesh local company statutory checks.
@@ -301,12 +304,14 @@ Guidelines for your response:
                   - Trigger Time: ${data.timestamp}
                   - Initiated By: ${data.username} (${data.role})
                   - Compliance Comments: ${data.notes || "Emergency warnings issued."}
+                  - Specific Audit Entry Deep-Link: [View Audit Entry](${auditLink})
                   
                   Please draft a highly authoritative, immediate-action, corporate compliance email addressed directly to the Company Director at "${directorEmail}".
                   Format:
                   1. CLEAR STATUTORY WARNING: State that a critical regulatory violation occurred under local Bangladesh corporate laws and that it must be cured immediately.
                   2. ASSOCIATED PENALTIES: Explain potential RJSC/NBR consequences (e.g. compounding fines, audit blocks, or public strike-off lists).
                   3. TASK REMEDIAL PLAN: Detail 3 precise procedural steps (such as board validation meetings, physical registry updates, and form filing uploads) required on the dashboard to clear the warning badge.
+                  4. SPECIFIC AUDIT ENTRY LINK: You MUST explicitly include the provided Specific Audit Entry Deep-Link (${auditLink}) inside the email body so the director can click the link and immediately inspect the exact compliance issue.
                   
                   Respond in crisp, professional, clean markdown. Do not include flowery self-congratulations or standard preamble. Begin the email immediately.`;
                   
@@ -315,7 +320,7 @@ Guidelines for your response:
                     contents: prompt,
                   });
                   
-                  emailBody = aiResponse.text || `Dear Director of ${companyName},\n\nA 'RED' severity compliance default has occurred regarding rule ${data.ruleName} (${ruleId}).\n\nPlease resolve this immediately to prevent statutory RJSC fines and legal penalties.`;
+                  emailBody = aiResponse.text || `Dear Director of ${companyName},\n\nA 'RED' severity compliance default has occurred regarding rule ${data.ruleName} (${ruleId}).\n\nPlease resolve this immediately to prevent statutory RJSC fines and legal penalties.\n\nLink to specific audit entry: ${auditLink}`;
                 } catch (err) {
                   console.error("[Firebase Cloud Function] GenAI automated draft failed, using local reserve template:", err);
                   emailBody = `Dear Director of ${companyName},\n\nThis is an automated legal compliance warning sent by the system's background Firebase Cloud Function trigger.
@@ -325,13 +330,13 @@ A 'RED' severity compliance default has been registered under local Bangladesh c
 Rule Code: ${ruleId}
 Rule Title: ${data.ruleName}
 Recorded On: ${data.timestamp}
-Audit Link: ${data.id}
+Audit Link: ${auditLink}
 
 PENALTIES & IMPLICATIONS:
 Under the Companies Act 1994, default to file required lists (e.g., Form XII, Form XI, or certified audits) on time leaves directors vulnerable to fines, filing bans, and risk of administrative strike-offs.
 
 REMEDIAL TASK WORKFLOW:
-1. Log into the local RJSC Compliance Admin Desk.
+1. Click the specific audit link above or log into the local RJSC Compliance Admin Desk: ${auditLink}
 2. Formulate and upload your certified documents synchronously.
 3. Mark the violation as cleared or request a manager override status on your dashboard.
 

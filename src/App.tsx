@@ -52,6 +52,29 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [companyToEdit, setCompanyToEdit] = useState<Company | null>(null);
 
+  // State: Deep linkage for direct audit trails
+  const [deepLinkId, setDeepLinkId] = useState<string | null>(null);
+
+  // Synchronize with URL Query Parameters for direct deep linking
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      const id = params.get('id');
+      const companyId = params.get('companyId');
+
+      if (tab === 'audit' || tab === 'timeline' || tab === 'drafts' || tab === 'trail' || tab === 'subscription' || tab === 'analytics' || tab === 'emails') {
+        setActiveTab(tab as any);
+      }
+      if (companyId && companies.some(c => c.id === companyId)) {
+        setSelectedCompanyId(companyId);
+      }
+      if (id) {
+        setDeepLinkId(id);
+      }
+    }
+  }, [companies]);
+
   // State: Active Dashboard Segment View
   const [activeTab, setActiveTab ] = useState<'audit' | 'timeline' | 'drafts' | 'trail' | 'subscription' | 'analytics' | 'emails'>('audit');
 
@@ -758,6 +781,7 @@ export default function App() {
                     trail={trail}
                     onClearTrail={handleClearTrail}
                     session={session}
+                    initialSearchQuery={deepLinkId || ''}
                   />
                 )}
                 {activeTab === 'analytics' && (

@@ -12,14 +12,22 @@ interface AuditTrailProps {
   trail: AuditTrailEntry[];
   onClearTrail: () => void;
   session: UserSession;
+  initialSearchQuery?: string;
 }
 
-export default function AuditTrail({ selectedCompany, trail, onClearTrail, session }: AuditTrailProps) {
-  const [searchQuery, setSearchQuery] = useState('');
+export default function AuditTrail({ selectedCompany, trail, onClearTrail, session, initialSearchQuery = '' }: AuditTrailProps) {
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [filterAction, setFilterAction] = useState<string>('all');
   const [showAllCompanies, setShowAllCompanies] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'timeline' | 'rules'>('timeline');
   const [expandedRuleIds, setExpandedRuleIds] = useState<Record<string, boolean>>({});
+
+  // Synchronize searchQuery if deep-link changes
+  React.useEffect(() => {
+    if (initialSearchQuery) {
+      setSearchQuery(initialSearchQuery);
+    }
+  }, [initialSearchQuery]);
 
   // Grouped rule history calculation
   const ruleHistories = useMemo(() => {
@@ -35,6 +43,7 @@ export default function AuditTrail({ selectedCompany, trail, onClearTrail, sessi
       
       // Search query filtering
       const matchesSearch = 
+        item.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.ruleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.ruleName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -215,6 +224,7 @@ export default function AuditTrail({ selectedCompany, trail, onClearTrail, sessi
       
       // Search matching
       const matchesSearch = 
+        item.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.ruleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.ruleName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -615,7 +625,11 @@ export default function AuditTrail({ selectedCompany, trail, onClearTrail, sessi
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.15 }}
-                      className="relative group bg-slate-900 border border-slate-850/70 p-4.5 rounded-xl hover:bg-slate-900/80 hover:border-slate-800 transition-all"
+                      className={`relative group bg-slate-900 p-4.5 rounded-xl hover:bg-slate-900/80 transition-all border ${
+                        initialSearchQuery && item.id === initialSearchQuery
+                          ? 'border-teal-500 bg-teal-500/5 shadow-[0_0_15px_rgba(20,184,166,0.15)]'
+                          : 'border-slate-850/70 hover:border-slate-800'
+                      }`}
                       id={`trail-card-${item.id}`}
                     >
                       {/* Circle Node on Timeline Left Line */}
