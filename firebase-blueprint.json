@@ -98,9 +98,27 @@
         "specialResolutionNotFiled": { "type": "boolean" },
         "capitalAlterationWithoutResolution": { "type": "boolean" },
         "notes": { "type": "string" },
-        "adminNotes": { "type": "string" }
+        "adminNotes": { "type": "string" },
+        "directorEmail": { "type": "string" }
       },
       "required": ["id", "name", "regNumber"]
+    },
+    "SentEmail": {
+      "title": "SentEmail",
+      "description": "Urgent compliance alert email sent to the company director by the background function",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "companyName": { "type": "string" },
+        "directorEmail": { "type": "string" },
+        "ruleId": { "type": "string" },
+        "ruleName": { "type": "string" },
+        "subject": { "type": "string" },
+        "body": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "companyId", "directorEmail", "subject", "body", "timestamp"]
     },
     "AuditTrailEntry": {
       "title": "AuditTrailEntry",
@@ -146,6 +164,10 @@
     "/bypassedRules/{companyId}": {
       "schema": "BypassedRules",
       "description": "Waivers or administrative overrides active for standard compliance limits"
+    },
+    "/sentEmails/{emailId}": {
+      "schema": "SentEmail",
+      "description": "Log of automated warning emails dispatched to directors for high-severity RED defaults"
     }
   }
 }

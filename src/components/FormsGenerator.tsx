@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Company } from '../types';
 import { FileText, Printer, Copy, Check, Download, AlertCircle, Landmark } from 'lucide-react';
 import { motion } from 'motion/react';
+import { jsPDF } from 'jspdf';
 
 interface FormsGeneratorProps {
   selectedCompany: Company;
@@ -17,6 +18,385 @@ export default function FormsGenerator({ selectedCompany }: FormsGeneratorProps)
   const [signatoryDesignation, setSignatoryDesignation] = useState('Managing Director');
   const [auditorName, setAuditorName] = useState('Rahman Rahman Huq FCA');
   const [shareValue, setShareValue] = useState('100'); // par value
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    setIsDownloading(true);
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Page Dimensions
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      let y = 20;
+
+      // Helper functions
+      const addHeader = (title: string, subtitle?: string, actText?: string) => {
+        // RJSC Seal / Gov Accent band
+        doc.setFillColor(11, 115, 71); // Deep forest green
+        doc.rect(margin, y, pageWidth - (margin * 2), 3, 'F');
+        y += 8;
+
+        // Republic Header
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(30, 41, 59);
+        doc.text("GOVERNMENT OF THE PEOPLE'S REPUBLIC OF BANGLADESH", pageWidth / 2, y, { align: 'center' });
+        y += 5;
+
+        doc.setFontSize(8);
+        doc.setFont('Helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        doc.text('REGISTRAR OF JOINT STOCK COMPANIES AND FIRMS', pageWidth / 2, y, { align: 'center' });
+        y += 8;
+
+        // Title
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor(11, 115, 71);
+        doc.text(title, pageWidth / 2, y, { align: 'center' });
+        y += 5;
+
+        if (subtitle) {
+          doc.setFont('Helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.setTextColor(71, 85, 105);
+          doc.text(subtitle, pageWidth / 2, y, { align: 'center' });
+          y += 5;
+        }
+
+        if (actText) {
+          doc.setFont('Helvetica', 'italic');
+          doc.setFontSize(8);
+          doc.setTextColor(100, 116, 139);
+          doc.text(actText, pageWidth / 2, y, { align: 'center' });
+          y += 8;
+        }
+
+        // Decorative divider
+        doc.setDrawColor(203, 213, 225);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 8;
+      };
+
+      const addFooter = () => {
+        const totalPages = doc.internal.pages.length - 1;
+        for (let i = 1; i <= totalPages; i++) {
+          doc.setPage(i);
+          doc.setFont('Helvetica', 'normal');
+          doc.setFontSize(7);
+          doc.setTextColor(148, 163, 184);
+          
+          // Horizontal line
+          doc.setDrawColor(226, 232, 240);
+          doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
+          
+          // Footer texts
+          doc.text('AFWA RJSC Sentinel Automated Document Filing Assistant', margin, pageHeight - 10);
+          doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
+          doc.text('Subject to administrative review under Bangladesh Companies Act 1994', pageWidth / 2, pageHeight - 10, { align: 'center' });
+        }
+      };
+
+      // Draw the PDF content based on selected doc type
+      if (selectedDoc === 'FormXII') {
+        addHeader(
+          'FORM XII',
+          'ANNUAL RETURN OF PRIVATE LIMITED COMPANY',
+          'Under Section 119 of the Bangladesh Companies Act, 1994'
+        );
+
+        // Section 1: Company Profile
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(9.5);
+        doc.setTextColor(30, 41, 59);
+        doc.text('1. COMPANY PARTICULARS', margin, y);
+        y += 5;
+
+        // Table/Grid Border
+        doc.setDrawColor(203, 213, 225);
+        doc.rect(margin, y, pageWidth - (margin * 2), 42); // 6 rows * 7mm = 42mm
+
+        // Sub-grid lines and fields
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(7.5);
+        
+        const rowHeight = 7;
+        const colWidth = (pageWidth - (margin * 2)) / 2;
+
+        const drawCell = (xPos: number, yPos: number, w: number, label: string, val: string) => {
+          doc.setFont('Helvetica', 'bold');
+          doc.setTextColor(100, 116, 139);
+          doc.text(label.toUpperCase(), xPos + 3, yPos + 4.5);
+          doc.setFont('Helvetica', 'normal');
+          doc.setTextColor(30, 41, 59);
+          doc.text(val || 'N/A', xPos + 35, yPos + 4.5);
+        };
+
+        // Draw horizontal divider lines
+        for (let r = 1; r < 6; r++) {
+          doc.line(margin, y + (r * rowHeight), pageWidth - margin, y + (r * rowHeight));
+        }
+        // Vertical central divider
+        doc.line(margin + colWidth, y, margin + colWidth, y + 42);
+
+        drawCell(margin, y, colWidth, 'Company Name', selectedCompany.name);
+        drawCell(margin + colWidth, y, colWidth, 'Registration No', selectedCompany.regNumber || 'C-PENDING/2026');
+        
+        drawCell(margin, y + rowHeight, colWidth, 'Meeting Date', meetingDate || 'Not Conceded');
+        drawCell(margin + colWidth, y + rowHeight, colWidth, 'Incorporation', selectedCompany.incorporationDate || 'Not Recorded');
+
+        drawCell(margin, y + (rowHeight * 2), colWidth, 'Fiscal Year End', selectedCompany.agmHeldInCurrentFY ? 'June 30, 2025' : 'December 31, 2025');
+        drawCell(margin + colWidth, y + (rowHeight * 2), colWidth, 'Directors Count', `${selectedCompany.totalDirectors} Active`);
+
+        drawCell(margin, y + (rowHeight * 3), colWidth, 'Industry Group', 'Commercial Industry');
+        drawCell(margin + colWidth, y + (rowHeight * 3), colWidth, 'Total Members', `${selectedCompany.totalDirectors} Shareholders`);
+
+        drawCell(margin, y + (rowHeight * 4), colWidth, 'Authorized Cap', `Tk. ${selectedCompany.authorizedCapital.toLocaleString()}`);
+        drawCell(margin + colWidth, y + (rowHeight * 4), colWidth, 'Paid-up Capital', `Tk. ${selectedCompany.paidUpCapital.toLocaleString()}`);
+
+        drawCell(margin, y + (rowHeight * 5), colWidth, 'Office Address', 'Dhaka Secretariat, Bangladesh');
+        drawCell(margin + colWidth, y + (rowHeight * 5), colWidth, 'Country Office', 'Bangladesh');
+
+        y += 48;
+
+        // Section 2: Capital Table
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(9.5);
+        doc.setTextColor(30, 41, 59);
+        doc.text('2. LIABILITIES & NOMINAL CAPITAL DIVISION', margin, y);
+        y += 5;
+
+        // Table Headers
+        doc.setFillColor(241, 245, 249);
+        doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(71, 85, 105);
+        doc.text('CAPITAL CLASS', margin + 3, y + 5);
+        doc.text('SHARES (QTY)', margin + 70, y + 5, { align: 'right' });
+        doc.text('FACE VALUE (Tk)', margin + 110, y + 5, { align: 'right' });
+        doc.text('AGGREGATE AMOUNT (BDT)', pageWidth - margin - 3, y + 5, { align: 'right' });
+        y += 8;
+
+        const drawTableRow = (label: string, qty: string, faceVal: string, total: string) => {
+          doc.setDrawColor(226, 232, 240);
+          doc.line(margin, y, pageWidth - margin, y);
+          doc.setFont('Helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(30, 41, 59);
+          doc.text(label, margin + 3, y + 5);
+          doc.text(qty, margin + 70, y + 5, { align: 'right' });
+          doc.text(faceVal, margin + 110, y + 5, { align: 'right' });
+          doc.setFont('Helvetica', 'bold');
+          doc.text(total, pageWidth - margin - 3, y + 5, { align: 'right' });
+          y += 8;
+        };
+
+        const sharesAuth = (selectedCompany.authorizedCapital / Number(shareValue)).toLocaleString();
+        const sharesPaid = (selectedCompany.paidUpCapital / Number(shareValue)).toLocaleString();
+
+        drawTableRow('Authorized Share Capital', sharesAuth, `Tk. ${shareValue}`, `Tk. ${selectedCompany.authorizedCapital.toLocaleString()}`);
+        drawTableRow('Subscribed & Paid-up Capital', sharesPaid, `Tk. ${shareValue}`, `Tk. ${selectedCompany.paidUpCapital.toLocaleString()}`);
+        
+        y += 8;
+
+        // Section 3: Declaration & Verification
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(9.5);
+        doc.setTextColor(30, 41, 59);
+        doc.text('3. CORPORATE DECLARATION & RESOLUTIONS', margin, y);
+        y += 5;
+
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(71, 85, 105);
+        const decText = 'I hereby declare, in the capacity of an authorised officer of this corporation, that the company has not, since the date of the last annual return or since incorporation, issued any active invitation to the general public to subscribe for any shares of the company, and that all details provided in this Form XII annual return correspond perfectly and represent active facts as verified under Section 119 of the Bangladesh Companies Act, 1994.';
+        const splitDec = doc.splitTextToSize(decText, pageWidth - (margin * 2));
+        doc.text(splitDec, margin, y);
+        y += splitDec.length * 4.5 + 15;
+
+        // Signatures
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Filing Location: RJSC Dhaka Secretariat Office', margin, y);
+        doc.text(`Filing Date: ${new Date().toISOString().split('T')[0]}`, margin, y + 4);
+
+        doc.setDrawColor(148, 163, 184);
+        doc.line(pageWidth - margin - 55, y + 3, pageWidth - margin, y + 3);
+        doc.setFont('Helvetica', 'bold');
+        doc.setTextColor(30, 41, 59);
+        doc.text(signatoryName, pageWidth - margin, y + 7, { align: 'right' });
+        doc.setFont('Helvetica', 'normal');
+        doc.setTextColor(115, 115, 115);
+        doc.text(signatoryDesignation, pageWidth - margin, y + 11, { align: 'right' });
+
+      } else if (selectedDoc === 'ScheduleX') {
+        addHeader(
+          'SCHEDULE X',
+          'LIST OF ACTIVE MEMBERS & SHAREHOLDING BALANCES',
+          'See Section 119 and Table F of the Bangladesh Companies Act, 1994'
+        );
+
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(30, 41, 59);
+        doc.text(`List of persons holding shares in ${selectedCompany.name} on the date of the Annual General Meeting held on ${meetingDate || '2026-06-15'}.`, margin, y);
+        y += 8;
+
+        // Table Setup
+        doc.setFillColor(241, 245, 249);
+        doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(71, 85, 105);
+        doc.text('FOLIO NO.', margin + 3, y + 5);
+        doc.text('MEMBER NAME & RESIDENTIAL ADDRESS', margin + 30, y + 5);
+        doc.text('SHARES HELD', margin + 120, y + 5, { align: 'right' });
+        doc.text('TOTAL PAID VALUE', pageWidth - margin - 3, y + 5, { align: 'right' });
+        y += 8;
+
+        const drawMemberRow = (folio: string, name: string, addr: string, shares: string, value: string) => {
+          doc.setDrawColor(226, 232, 240);
+          doc.line(margin, y, pageWidth - margin, y);
+          doc.setFont('Helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.setTextColor(30, 41, 59);
+          doc.text(folio, margin + 3, y + 5);
+          doc.text(name, margin + 30, y + 5);
+          
+          doc.setFont('Helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(100, 116, 139);
+          doc.text(addr, margin + 30, y + 9);
+
+          doc.setFont('Helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(30, 41, 59);
+          doc.text(shares, margin + 120, y + 5, { align: 'right' });
+          doc.setFont('Helvetica', 'bold');
+          doc.text(value, pageWidth - margin - 3, y + 5, { align: 'right' });
+          y += 14;
+        };
+
+        const rawVal1 = selectedCompany.paidUpCapital * 0.6;
+        const rawVal2 = selectedCompany.paidUpCapital * 0.4;
+        const sharesQty1 = ((rawVal1) / Number(shareValue)).toLocaleString();
+        const sharesQty2 = ((rawVal2) / Number(shareValue)).toLocaleString();
+
+        drawMemberRow('FOL-001', 'M. N. Islam', 'House 12, Road 4, Banani, Dhaka, Bangladesh', sharesQty1, `Tk. ${rawVal1.toLocaleString()}`);
+        drawMemberRow('FOL-002', 'Nouri Begum', 'Road 12, Section 2, Mirpur, Dhaka, Bangladesh', sharesQty2, `Tk. ${rawVal2.toLocaleString()}`);
+
+        // Section Total
+        doc.setDrawColor(148, 163, 184);
+        doc.line(margin, y, pageWidth - margin, y);
+        doc.setFillColor(248, 250, 252);
+        doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
+        
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(30, 41, 59);
+        doc.text('TOTAL NOMINAL PAID CAPITAL REGISTERED', margin + 3, y + 5);
+        doc.text((selectedCompany.paidUpCapital / Number(shareValue)).toLocaleString(), margin + 120, y + 5, { align: 'right' });
+        doc.text(`Tk. ${selectedCompany.paidUpCapital.toLocaleString()}`, pageWidth - margin - 3, y + 5, { align: 'right' });
+        y += 20;
+
+        // Signatures
+        doc.setDrawColor(186, 230, 253);
+        doc.line(margin, y, margin + 50, y);
+        doc.line(pageWidth - margin - 50, y, pageWidth - margin, y);
+        
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Verified By Secretary', margin + 25, y + 5, { align: 'center' });
+        doc.text('Managing Director Signature', pageWidth - margin - 25, y + 5, { align: 'center' });
+
+      } else if (selectedDoc === 'FormVIII') {
+        addHeader(
+          'FORM VIII',
+          'NOTIFICATION OF STATUTORY AUDITOR APPOINTMENT',
+          'Under Section 210 of the Bangladesh Companies Act, 1994'
+        );
+
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(9.5);
+        doc.setTextColor(30, 41, 59);
+        doc.text('To,\nThe Registrar of Joint Stock Companies and Firms,\nDhaka, Bangladesh.', margin, y);
+        y += 15;
+
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(9.5);
+        doc.setTextColor(30, 41, 59);
+        const mainNotice = `Notice is hereby given pursuant to Section 210(1) of the Bangladesh Companies Act, 1994, that the Board of Directors of ${selectedCompany.name} has formally resolved to appoint statutory auditors for the company:`;
+        const splitNotice = doc.splitTextToSize(mainNotice, pageWidth - (margin * 2));
+        doc.text(splitNotice, margin, y);
+        y += splitNotice.length * 4.5 + 8;
+
+        // Detailed card
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(226, 232, 240);
+        doc.rect(margin, y, pageWidth - (margin * 2), 35, 'FD');
+
+        const drawDetailLine = (label: string, content: string, yOfs: number) => {
+          doc.setFont('Helvetica', 'bold');
+          doc.setFontSize(7.5);
+          doc.setTextColor(100, 116, 139);
+          doc.text(label, margin + 5, y + yOfs);
+          doc.setFont('Helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.setTextColor(30, 41, 59);
+          doc.text(content, margin + 5, y + yOfs + 4.5);
+        };
+
+        drawDetailLine('A. AUDITOR REGISTERED FIRM NAME', auditorName, 5);
+        drawDetailLine('B. PROFESSIONAL CERTIFICATION BODY', 'Institute of Chartered Accountants of Bangladesh (ICAB)', 15);
+        drawDetailLine('C. EFFECTIVE TENURE & OPERATIONS', 'From appointment date until conclusion of first General AGM.', 25);
+        y += 42;
+
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(71, 85, 105);
+        const decText = 'We verify that the statutory audit selection complied with internal board processes, conflicts of interest have been fully evaluated, and disclosure filings remain current in active state archives.';
+        const splitDec = doc.splitTextToSize(decText, pageWidth - (margin * 2));
+        doc.text(splitDec, margin, y);
+        y += splitDec.length * 4.5 + 15;
+
+        // Signatures
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Place: Dhaka, Bangladesh', margin, y);
+        doc.text(`Date of Issue: ${new Date().toISOString().split('T')[0]}`, margin, y + 4);
+
+        doc.setDrawColor(148, 163, 184);
+        doc.line(pageWidth - margin - 55, y + 3, pageWidth - margin, y + 3);
+        doc.setFont('Helvetica', 'bold');
+        doc.setTextColor(30, 41, 59);
+        doc.text(signatoryName, pageWidth - margin, y + 7, { align: 'right' });
+        doc.setFont('Helvetica', 'normal');
+        doc.setTextColor(115, 115, 115);
+        doc.text(signatoryDesignation, pageWidth - margin, y + 11, { align: 'right' });
+      }
+
+      addFooter();
+
+      // Trigger immediate download with A4 structure
+      const safeDocName = selectedDoc.replace(/\s+/g, '_');
+      const safeCompName = selectedCompany.name.replace(/[^a-zA-Z0-9]/g, '_');
+      doc.save(`RJSC_${safeDocName}_${safeCompName}.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF document:', error);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   useEffect(() => {
     // Attempt sensible pre-populations
@@ -198,6 +578,14 @@ export default function FormsGenerator({ selectedCompany }: FormsGeneratorProps)
               >
                 <Printer className="w-4 h-4" />
                 <span>Print</span>
+              </button>
+              <button
+                onClick={handleDownloadPDF}
+                disabled={isDownloading}
+                className="p-1 px-2 text-xs font-mono text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg flex items-center gap-1 cursor-pointer disabled:opacity-55"
+              >
+                <Download className={`w-4 h-4 ${isDownloading ? 'animate-bounce' : ''}`} />
+                <span>{isDownloading ? 'Generating...' : 'Download PDF'}</span>
               </button>
             </div>
           </div>

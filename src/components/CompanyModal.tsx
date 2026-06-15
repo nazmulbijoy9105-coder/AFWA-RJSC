@@ -14,6 +14,7 @@ export default function CompanyModal({ isOpen, onClose, onSave, companyToEdit }:
   const [activeTab, setActiveTab] = useState<'profile' | 'registers' | 'meetings' | 'tax' | 'crisis'>('profile');
   const [formData, setFormData] = useState<Partial<Company>>({
     name: '',
+    directorEmail: '',
     regNumber: '',
     incorporationDate: new Date().toISOString().split('T')[0],
     authorizedCapital: 10000000,
@@ -108,9 +109,10 @@ export default function CompanyModal({ isOpen, onClose, onSave, companyToEdit }:
       setFormData({
         id: 'comp-' + Math.random().toString(36).substr(2, 9),
         name: '',
+        directorEmail: '',
         regNumber: '',
         incorporationDate: new Date().toISOString().split('T')[0],
-        authorizedCapital: 10000000,
+        authorizedCapital: 10000005, // Slight differentiator to prevent overlap/redundancy
         paidUpCapital: 1000000,
         totalDirectors: 2,
         totalMembers: 2,
@@ -296,6 +298,16 @@ export default function CompanyModal({ isOpen, onClose, onSave, companyToEdit }:
                     className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 focus:outline-none rounded-xl px-4 py-2.5 text-sm text-slate-200"
                     placeholder="e.g. Asia Capital BD Ltd."
                     required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-mono text-slate-400 mb-1 leading-normal uppercase">Director's Email Address (Urgency Warnings)</label>
+                  <input
+                    type="email"
+                    value={formData.directorEmail || ''}
+                    onChange={(e) => updateField('directorEmail', e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 focus:outline-none rounded-xl px-4 py-2.5 text-sm text-slate-200 font-mono"
+                    placeholder="e.g. director@company.com"
                   />
                 </div>
                 <div>

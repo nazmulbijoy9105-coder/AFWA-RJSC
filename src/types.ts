@@ -1,6 +1,7 @@
 export interface Company {
   id: string;
   name: string;
+  directorEmail?: string; // Target email address for RED severity compliance actions
   regNumber: string;
   incorporationDate: string; // YYYY-MM-DD
   authorizedCapital: number; // BDT
@@ -152,5 +153,17 @@ export interface AuditTrailEntry {
   username: string;
   role: string;
   notes?: string;
+}
+
+export interface SentEmail {
+  id: string;
+  companyId: string;
+  companyName: string;
+  directorEmail: string;
+  ruleId: string;
+  ruleName: string;
+  subject: string;
+  body: string;
+  timestamp: string;
 }
 

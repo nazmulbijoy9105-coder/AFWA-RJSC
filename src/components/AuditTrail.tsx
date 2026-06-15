@@ -18,6 +18,56 @@ export default function AuditTrail({ selectedCompany, trail, onClearTrail, sessi
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAction, setFilterAction] = useState<string>('all');
   const [showAllCompanies, setShowAllCompanies] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<'timeline' | 'rules'>('timeline');
+  const [expandedRuleIds, setExpandedRuleIds] = useState<Record<string, boolean>>({});
+
+  // Grouped rule history calculation
+  const ruleHistories = useMemo(() => {
+    const groups: Record<string, AuditTrailEntry[]> = {};
+    
+    // Sort trail oldest first for chronological progression inside each rule group
+    const sortedBaseTrail = [...trail].sort((a, b) => new Date(a.timestamp).getTime() - b.timestamp.localeCompare(a.timestamp));
+    
+    sortedBaseTrail.forEach(item => {
+      // Company match filter (Selected company or all)
+      const companyMatches = showAllCompanies || item.companyId === selectedCompany.id;
+      if (!companyMatches) return;
+      
+      // Search query filtering
+      const matchesSearch = 
+        item.ruleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.ruleName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.notes && item.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+      if (!matchesSearch) return;
+
+      if (!groups[item.ruleId]) {
+        groups[item.ruleId] = [];
+      }
+      groups[item.ruleId].push(item);
+    });
+
+    return Object.entries(groups).map(([ruleId, items]) => {
+      const sortedItems = [...items].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      const latestItem = sortedItems[sortedItems.length - 1];
+      
+      return {
+        ruleId,
+        ruleName: latestItem.ruleName,
+        companyId: latestItem.companyId,
+        currentStatus: latestItem.action, // 'triggered' | 'acknowledged' | 'cleared'
+        history: sortedItems,
+        latestItem,
+      };
+    }).sort((a, b) => new Date(b.latestItem.timestamp).getTime() - new Date(a.latestItem.timestamp).getTime()); // sort by latest action first
+  }, [trail, selectedCompany, searchQuery, showAllCompanies]);
+
+  const filteredRuleHistories = useMemo(() => {
+    return ruleHistories.filter(group => {
+      if (filterAction === 'all') return true;
+      return group.currentStatus === filterAction;
+    });
+  }, [ruleHistories, filterAction]);
 
   // Gemini Synthesis states
   const [isGenerating, setIsGenerating] = useState(false);
@@ -281,6 +331,32 @@ export default function AuditTrail({ selectedCompany, trail, onClearTrail, sessi
         </div>
       </div>
 
+      {/* View Mode Switching System */}
+      <div className="flex bg-slate-900 border border-slate-800 p-1 rounded-2xl max-w-fit font-mono text-[11px] gap-1" id="audit-trail-view-mode-tabs">
+        <button
+          onClick={() => setViewMode('timeline')}
+          className={`px-4 py-2 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${
+            viewMode === 'timeline'
+              ? 'bg-slate-800 text-white font-bold border border-slate-700 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5 text-indigo-400" />
+          <span>Chronological Activity Timeline</span>
+        </button>
+        <button
+          onClick={() => setViewMode('rules')}
+          className={`px-4 py-2 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${
+            viewMode === 'rules'
+              ? 'bg-slate-800 text-white font-bold border border-slate-700 shadow-sm'
+              : 'text-slate-400 hover:text-emerald-400'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Compliance Rules History Matrix</span>
+        </button>
+      </div>
+
       {/* Interactive Controls Filter Belt */}
       <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between" id="trail-filter-belt">
         <div className="flex flex-col sm:flex-row gap-3 grow">
@@ -289,7 +365,7 @@ export default function AuditTrail({ selectedCompany, trail, onClearTrail, sessi
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
             <input
               type="text"
-              placeholder="Search audit trail (code, rules, operators...)"
+              placeholder={viewMode === 'rules' ? "Search rule history (code, title, operators...)" : "Search audit trail (code, rules, operators...)"}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-slate-900 border border-slate-800 focus:border-teal-500 focus:outline-none rounded-xl pl-10 pr-4 py-2 text-xs text-slate-300 font-mono"
@@ -304,7 +380,7 @@ export default function AuditTrail({ selectedCompany, trail, onClearTrail, sessi
                 filterAction === 'all' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              All Actions
+              All Statuses
             </button>
             <button
               onClick={() => setFilterAction('triggered')}
@@ -312,7 +388,7 @@ export default function AuditTrail({ selectedCompany, trail, onClearTrail, sessi
                 filterAction === 'triggered' ? 'bg-rose-500/10 text-rose-300 border border-rose-500/20 font-bold' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Triggered
+              {viewMode === 'rules' ? 'Active Violations' : 'Triggered'}
             </button>
             <button
               onClick={() => setFilterAction('acknowledged')}
@@ -328,7 +404,7 @@ export default function AuditTrail({ selectedCompany, trail, onClearTrail, sessi
                 filterAction === 'cleared' ? 'bg-teal-500/10 text-teal-300 border border-teal-500/20 font-bold' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Cleared
+              Cleared / Resolved
             </button>
           </div>
         </div>
@@ -349,134 +425,271 @@ export default function AuditTrail({ selectedCompany, trail, onClearTrail, sessi
         </div>
       </div>
 
-      {/* Main Timeline Stream */}
-      <div className="space-y-4" id="trail-timeline-stream">
-        {sortedAndFilteredTrail.length === 0 ? (
-          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-16 text-center select-none">
-            <FileClock className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="text-xs font-mono text-slate-500">
-              No audit logs captured for this scope matching parameters.
-            </p>
-            <p className="text-[10px] font-mono text-slate-600 max-w-sm mx-auto mt-2 leading-relaxed">
-              Compliance events log automatically when the company defaults change, or manually when operators acknowledge specific rules.
-            </p>
-          </div>
-        ) : (
-          <div className="relative pl-6 border-l-2 border-slate-850 space-y-4 ml-3" id="timeline-vanguard-connector-line">
-            <AnimatePresence initial={false}>
-              {sortedAndFilteredTrail.map((item, index) => {
-                let badgeStyle = 'text-rose-400 border-rose-500/20 bg-rose-500/5';
-                let iconBlock = <AlertCircle className="w-4 h-4" />;
-                let actionText = 'Violation Triggered';
+      {/* Main View Stream */}
+      {viewMode === 'rules' ? (
+        <div className="space-y-4" id="grouped-rules-compliance-ledger">
+          {filteredRuleHistories.length === 0 ? (
+            <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-16 text-center select-none">
+              <ShieldAlert className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+              <p className="text-xs font-mono text-slate-500">
+                No compliance rules fit the selected status in this audit ledger.
+              </p>
+              <p className="text-[10px] font-mono text-slate-600 max-w-sm mx-auto mt-2 leading-relaxed">
+                Check other status filter pills (e.g. Cleared, Active Violations) or toggle company scope to view records.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              <AnimatePresence initial={false}>
+                {filteredRuleHistories.map((group) => {
+                  const isExpanded = expandedRuleIds[group.ruleId] === true;
+                  
+                  // Status badges style
+                  const statusColors = {
+                    triggered: {
+                      badge: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
+                      label: 'Active Violation Defect',
+                      icon: <AlertCircle className="w-3.5 h-3.5 text-rose-450" />
+                    },
+                    acknowledged: {
+                      badge: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+                      label: 'Officer Acknowledged',
+                      icon: <Eye className="w-3.5 h-3.5 text-amber-500" />
+                    },
+                    cleared: {
+                      badge: 'text-teal-400 bg-teal-500/10 border-teal-500/20',
+                      label: 'Verified Fully Resolved',
+                      icon: <CheckCircle2 className="w-3.5 h-3.5 text-teal-450" />
+                    }
+                  }[group.currentStatus] || {
+                    badge: 'text-slate-400 bg-slate-500/10 border-slate-500/20',
+                    label: 'Unknown',
+                    icon: <AlertCircle className="w-3.5 h-3.5" />
+                  };
 
-                if (item.action === 'acknowledged') {
-                  badgeStyle = 'text-amber-400 border-amber-500/20 bg-amber-500/5';
-                  iconBlock = <Eye className="w-4 h-4" />;
-                  actionText = 'Acknowledge Signed';
-                } else if (item.action === 'cleared') {
-                  badgeStyle = 'text-teal-400 border-teal-500/20 bg-teal-500/5';
-                  iconBlock = <CheckCircle2 className="w-4 h-4" />;
-                  actionText = 'Violation Resolved';
-                }
+                  return (
+                    <motion.div
+                      key={group.ruleId}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      className="bg-slate-900 border border-slate-850 p-5 rounded-2xl space-y-4 text-left hover:border-slate-800 hover:shadow-lg transition-all"
+                      id={`rule-group-${group.ruleId}`}
+                    >
+                      {/* Top Header Card */}
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-mono font-bold bg-slate-950 px-2.5 py-1 rounded border border-slate-800 text-teal-400">
+                            {group.ruleId}
+                          </span>
+                          <span className={`text-[10px] font-mono uppercase tracking-widest font-black px-2.5 py-1 rounded-md border flex items-center gap-1.5 ${statusColors.badge}`}>
+                            {statusColors.icon}
+                            <span>{statusColors.label}</span>
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-500">
+                          {group.history.length} lifecycle {group.history.length === 1 ? 'event' : 'events'} recorded
+                        </div>
+                      </div>
 
-                // Check relative time calculation or display absolute
-                const relativeTime = (() => {
-                  try {
-                    const elapsed = Date.now() - new Date(item.timestamp).getTime();
-                    const seconds = Math.floor(elapsed / 1000);
-                    const minutes = Math.floor(seconds / 60);
-                    const hours = Math.floor(minutes / 60);
-                    const days = Math.floor(hours / 24);
+                      {/* Rule details */}
+                      <div className="space-y-1">
+                        <h3 className="text-sm font-sans font-bold text-white tracking-tight">
+                          {group.ruleName}
+                        </h3>
+                        <p className="text-[11px] font-mono text-slate-500">
+                          Bangladesh Companies Act 1994 statutory obligation.
+                        </p>
+                      </div>
 
-                    if (days > 0) return `${days}d ago`;
-                    if (hours > 0) return `${hours}h ago`;
-                    if (minutes > 0) return `${minutes}m ago`;
-                    return 'just now';
-                  } catch (e) {
-                    return item.timestamp;
+                      {/* Complete sequenced Step-by-Step flow */}
+                      <div className="bg-slate-950/60 border border-slate-850 p-4 rounded-xl space-y-3 font-mono text-xs">
+                        <div className="text-[10px] uppercase font-bold text-slate-500 tracking-widest border-b border-slate-800 pb-2 flex items-center justify-between">
+                          <span>Statutory Progression Stream</span>
+                          <span className="text-[9px] text-slate-400">Oldest to Newest</span>
+                        </div>
+                        
+                        <div className="relative pl-4 border-l border-slate-800 space-y-4 pt-1">
+                          {group.history.map((evt, idx) => {
+                            const evtColors = {
+                              triggered: 'bg-rose-500 text-rose-500 border-rose-400/50',
+                              acknowledged: 'bg-amber-500 text-amber-500 border-amber-405/50',
+                              cleared: 'bg-teal-500 text-teal-500 border-teal-400/50',
+                            }[evt.action];
+
+                            return (
+                              <div key={evt.id} className="relative text-[11px]" id={`progression-step-${evt.id}`}>
+                                {/* Progression Marker Dot */}
+                                <div className={`absolute -left-[20.5px] top-1 w-2.5 h-2.5 rounded-full border bg-slate-950 ${evtColors}`} />
+                                
+                                <div className="space-y-1.5">
+                                  {/* Step details strip */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="capitalize font-bold text-slate-200">
+                                        {evt.action === 'triggered' ? '🔴 Triggered Defect' : evt.action === 'acknowledged' ? '🟡 Filing Acknowledged' : '🟢 Verified Cleared'}
+                                      </span>
+                                      <span className="text-[10px] text-slate-600">by</span>
+                                      <span className="text-[10px] text-slate-300 font-semibold bg-slate-900 border border-slate-850 px-1.5 py-0.5 rounded flex items-center gap-1.5">
+                                        <User className="w-2.5 h-2.5 text-slate-500" />
+                                        <span>{evt.username}</span>
+                                        <span className="text-[8px] text-slate-500">[{evt.role}]</span>
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                                      <Clock className="w-2.5 h-2.5" />
+                                      <span>{new Date(evt.timestamp).toLocaleString()}</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Operator Notes details */}
+                                  {evt.notes && (
+                                    <p className="text-slate-400 font-sans text-xs italic bg-slate-900/40 p-2.5 border border-slate-850 rounded-lg pl-3 leading-normal">
+                                      &ldquo;{evt.notes}&rdquo;
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4" id="trail-timeline-stream">
+          {sortedAndFilteredTrail.length === 0 ? (
+            <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-16 text-center select-none">
+              <FileClock className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+              <p className="text-xs font-mono text-slate-500">
+                No audit logs captured for this scope matching parameters.
+              </p>
+              <p className="text-[10px] font-mono text-slate-600 max-w-sm mx-auto mt-2 leading-relaxed">
+                Compliance events log automatically when the company defaults change, or manually when operators acknowledge specific rules.
+              </p>
+            </div>
+          ) : (
+            <div className="relative pl-6 border-l-2 border-slate-850 space-y-4 ml-3" id="timeline-vanguard-connector-line">
+              <AnimatePresence initial={false}>
+                {sortedAndFilteredTrail.map((item, index) => {
+                  let badgeStyle = 'text-rose-400 border-rose-500/20 bg-rose-500/5';
+                  let iconBlock = <AlertCircle className="w-4 h-4" />;
+                  let actionText = 'Violation Triggered';
+
+                  if (item.action === 'acknowledged') {
+                    badgeStyle = 'text-amber-400 border-amber-500/20 bg-amber-500/5';
+                    iconBlock = <Eye className="w-4 h-4" />;
+                    actionText = 'Acknowledge Signed';
+                  } else if (item.action === 'cleared') {
+                    badgeStyle = 'text-teal-400 border-teal-500/20 bg-teal-500/5';
+                    iconBlock = <CheckCircle2 className="w-4 h-4" />;
+                    actionText = 'Violation Resolved';
                   }
-                })();
 
-                return (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="relative group bg-slate-900 border border-slate-850/70 p-4.5 rounded-xl hover:bg-slate-900/80 hover:border-slate-800 transition-all"
-                    id={`trail-card-${item.id}`}
-                  >
-                    {/* Circle Node on Timeline Left Line */}
-                    <div className={`absolute -left-[31px] top-5 w-4 h-4 rounded-full border-2 bg-slate-950 flex items-center justify-center transition-transform group-hover:scale-110 ${
-                      item.action === 'triggered' ? 'border-rose-500 text-rose-500' : 
-                      item.action === 'acknowledged' ? 'border-amber-500 text-amber-500' : 'border-teal-500 text-teal-500'
-                    }`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${
-                        item.action === 'triggered' ? 'bg-rose-500' :
-                        item.action === 'acknowledged' ? 'bg-amber-500' : 'bg-teal-500'
-                      }`} />
-                    </div>
+                  // Check relative time calculation or display absolute
+                  const relativeTime = (() => {
+                    try {
+                      const elapsed = Date.now() - new Date(item.timestamp).getTime();
+                      const seconds = Math.floor(elapsed / 1000);
+                      const minutes = Math.floor(seconds / 60);
+                      const hours = Math.floor(minutes / 60);
+                      const days = Math.floor(hours / 24);
 
-                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 font-mono text-xs">
-                      {/* Left Column info */}
-                      <div className="grow space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border inline-flex items-center gap-1 leading-none ${badgeStyle}`}>
-                            {iconBlock}
-                            <span>{actionText}</span>
-                          </span>
+                      if (days > 0) return `${days}d ago`;
+                      if (hours > 0) return `${hours}h ago`;
+                      if (minutes > 0) return `${minutes}m ago`;
+                      return 'just now';
+                    } catch (e) {
+                      return item.timestamp;
+                    }
+                  })();
 
-                          <span className="text-[10px] text-slate-500">
-                            Code: <strong className="text-slate-400">{item.ruleId}</strong>
-                          </span>
+                  return (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="relative group bg-slate-900 border border-slate-850/70 p-4.5 rounded-xl hover:bg-slate-900/80 hover:border-slate-800 transition-all"
+                      id={`trail-card-${item.id}`}
+                    >
+                      {/* Circle Node on Timeline Left Line */}
+                      <div className={`absolute -left-[31px] top-5 w-4 h-4 rounded-full border-2 bg-slate-950 flex items-center justify-center transition-transform group-hover:scale-110 ${
+                        item.action === 'triggered' ? 'border-rose-500 text-rose-500' : 
+                        item.action === 'acknowledged' ? 'border-amber-500 text-amber-500' : 'border-teal-500 text-teal-500'
+                      }`}>
+                        <div className={`w-1.5 h-1.5 rounded-full ${
+                          item.action === 'triggered' ? 'bg-rose-500' :
+                          item.action === 'acknowledged' ? 'bg-amber-500' : 'bg-teal-500'
+                        }`} />
+                      </div>
 
-                          {showAllCompanies && (
-                            <span className="text-[10px] bg-slate-950 px-2 py-0.5 rounded border border-slate-850 text-slate-400">
-                              For selected: <strong>{item.companyId}</strong>
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 font-mono text-xs">
+                        {/* Left Column info */}
+                        <div className="grow space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border inline-flex items-center gap-1 leading-none ${badgeStyle}`}>
+                              {iconBlock}
+                              <span>{actionText}</span>
                             </span>
-                          )}
-                        </div>
 
-                        <div className="space-y-0.5">
-                          <h4 className="text-xs font-bold text-slate-200 tracking-tight leading-snug">
-                            {item.ruleName}
-                          </h4>
-                          {item.notes && (
-                            <p className="text-slate-400 font-sans text-xs italic bg-slate-950/40 p-2 border border-slate-850/40 rounded-lg mt-1 leading-normal">
-                              &ldquo;{item.notes}&rdquo;
-                            </p>
-                          )}
-                        </div>
-                      </div>
+                            <span className="text-[10px] text-slate-500">
+                              Code: <strong className="text-slate-400">{item.ruleId}</strong>
+                            </span>
 
-                      {/* Right Column: User Operator and Clock info */}
-                      <div className="shrink-0 flex md:flex-col items-start md:items-end justify-between font-mono text-[10px] gap-2 md:gap-1.5 min-w-[150px] border-t md:border-t-0 border-slate-850/60 pt-2 md:pt-0">
-                        {/* Specific User details */}
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-5 h-5 rounded-md bg-slate-950 border border-slate-800 flex items-center justify-center shrink-0">
-                            <User className="w-3 h-3 text-slate-400" />
+                            {showAllCompanies && (
+                              <span className="text-[10px] bg-slate-950 px-2 py-0.5 rounded border border-slate-850 text-slate-400">
+                                For selected: <strong>{item.companyId}</strong>
+                              </span>
+                            )}
                           </div>
-                          <div className="text-left md:text-right">
-                            <span className="block text-slate-300 font-semibold leading-tight">{item.username}</span>
-                            <span className="block text-[8px] text-slate-500 uppercase tracking-widest leading-none mt-0.5">Role: {item.role}</span>
+
+                          <div className="space-y-0.5">
+                            <h4 className="text-xs font-bold text-slate-200 tracking-tight leading-snug">
+                              {item.ruleName}
+                            </h4>
+                            {item.notes && (
+                              <p className="text-slate-400 font-sans text-xs italic bg-slate-950/40 p-2 border border-slate-850/40 rounded-lg mt-1 leading-normal">
+                                &ldquo;{item.notes}&rdquo;
+                              </p>
+                            )}
                           </div>
                         </div>
 
-                        {/* Relative / absolute clock */}
-                        <div className="text-slate-500 flex items-center gap-1 select-none leading-none">
-                          <Clock className="w-3 h-3 text-slate-600" />
-                          <span className="font-semibold text-slate-400" title={item.timestamp}>{relativeTime}</span>
-                          <span className="text-slate-600 text-[9px] hidden lg:inline">({item.timestamp.split('T')[0]})</span>
+                        {/* Right Column: User Operator and Clock info */}
+                        <div className="shrink-0 flex md:flex-col items-start md:items-end justify-between font-mono text-[10px] gap-2 md:gap-1.5 min-w-[150px] border-t md:border-t-0 border-slate-850/60 pt-2 md:pt-0">
+                          {/* Specific User details */}
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-5 h-5 rounded-md bg-slate-950 border border-slate-800 flex items-center justify-center shrink-0">
+                              <User className="w-3 h-3 text-slate-400" />
+                            </div>
+                            <div className="text-left md:text-right">
+                              <span className="block text-slate-300 font-semibold leading-tight">{item.username}</span>
+                              <span className="block text-[8px] text-slate-500 uppercase tracking-widest leading-none mt-0.5">Role: {item.role}</span>
+                            </div>
+                          </div>
+
+                          {/* Relative / absolute clock */}
+                          <div className="text-slate-500 flex items-center gap-1 select-none leading-none">
+                            <Clock className="w-3 h-3 text-slate-600" />
+                            <span className="font-semibold text-slate-400" title={item.timestamp}>{relativeTime}</span>
+                            <span className="text-slate-600 text-[9px] hidden lg:inline">({item.timestamp.split('T')[0]})</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          </div>
-        )}
-      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* WEEKLY COMPLIANCE BRIEFING SUMMARY MODAL */}
       <AnimatePresence>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { Company, UserSession, AuditTrailEntry } from './types';
+import { Company, UserSession, AuditTrailEntry, SentEmail } from './types';
 import { COMPLIANCE_RULES, MOCK_COMPANIES } from './data/rules';
 import { 
   collection, 
@@ -23,11 +23,12 @@ import PredictiveRiskForecast from './components/PredictiveRiskForecast';
 import StatutoryChat from './components/StatutoryChat';
 import SubscriptionDesk from './components/SubscriptionDesk';
 import ComplianceAnalytics from './components/ComplianceAnalytics';
+import DirectorEmailLogs from './components/DirectorEmailLogs';
 
 // Icons
 import {
   Plus, Edit3, Trash2, Calendar, AlertTriangle, ShieldCheck, Scale,
-  BookOpen, Clock, FileCheck, Terminal, HelpCircle, FileText, ChevronRight, FileClock, Sparkles, TrendingUp
+  BookOpen, Clock, FileCheck, Terminal, HelpCircle, FileText, ChevronRight, FileClock, Sparkles, TrendingUp, Mail
 } from 'lucide-react';
 
 export default function App() {
@@ -45,13 +46,14 @@ export default function App() {
   // State: Compliance manual trails and overrides mapping companyId -> bypassed rules list
   const [trail, setTrail] = useState<AuditTrailEntry[]>([]);
   const [bypassedRules, setBypassedRules] = useState<Record<string, string[]>>({});
+  const [sentEmails, setSentEmails] = useState<SentEmail[]>([]);
 
   // State: Modals & Editing
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [companyToEdit, setCompanyToEdit] = useState<Company | null>(null);
 
   // State: Active Dashboard Segment View
-  const [activeTab, setActiveTab ] = useState<'audit' | 'timeline' | 'drafts' | 'trail' | 'subscription' | 'analytics'>('audit');
+  const [activeTab, setActiveTab ] = useState<'audit' | 'timeline' | 'drafts' | 'trail' | 'subscription' | 'analytics' | 'emails'>('audit');
 
   // Terminal Logs Sim State
   const [logs, setLogs] = useState<string[]>([
@@ -182,10 +184,27 @@ export default function App() {
       console.warn("Unable to read firestore bypasses:", error);
     });
 
+    // 4. Sync Sent Emails (From Automated trigger)
+    const unsubscribeSentEmails = onSnapshot(collection(db, 'sentEmails'), (snapshot) => {
+      try {
+        const emailList: SentEmail[] = [];
+        snapshot.forEach((docSnap) => {
+          emailList.push(docSnap.data() as SentEmail);
+        });
+        emailList.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setSentEmails(emailList);
+      } catch (err) {
+        console.error("Firestore loading error on sentEmails:", err);
+      }
+    }, (error) => {
+      console.warn("Unable to read firestore sentEmails:", error);
+    });
+
     return () => {
       unsubscribeCompanies();
       unsubscribeTrails();
       unsubscribeBypasses();
+      unsubscribeSentEmails();
     };
   }, [session.isLoggedIn, session.username]);
 
@@ -691,6 +710,20 @@ export default function App() {
               <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
               <span>AFWA Subscription</span>
             </button>
+            <button
+              onClick={() => {
+                setActiveTab('emails');
+                addLog('Command Section: Urgency Alert Emails Log');
+              }}
+              className={`px-5 py-2 rounded-xl flex items-center gap-2 cursor-pointer transition-all ${
+                activeTab === 'emails'
+                  ? 'bg-slate-850 text-white font-semibold border border-slate-700 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Mail className="w-4 h-4 text-red-400 animate-pulse" />
+              <span>Director Email Logs</span>
+            </button>
           </div>
 
           {/* Render Active View tab */}
@@ -729,6 +762,12 @@ export default function App() {
                 )}
                 {activeTab === 'analytics' && (
                   <ComplianceAnalytics selectedCompany={selectedCompany} />
+                )}
+                {activeTab === 'emails' && (
+                  <DirectorEmailLogs 
+                    selectedCompany={selectedCompany} 
+                    sentEmails={sentEmails} 
+                  />
                 )}
               </>
             ) : (

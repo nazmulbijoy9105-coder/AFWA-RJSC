@@ -1,10 +1,16 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import { initializeApp } from "firebase/app";
+import { initializeFirestore, collection, doc, onSnapshot, getDoc, setDoc, setLogLevel } from "firebase/firestore";
 import dotenv from "dotenv";
 
 dotenv.config();
+
+// Set the Firestore log level to 'error' to prevent verbose internal gRPC idle connection/stream-cancelled warnings on the backend
+setLogLevel('error');
 
 async function startServer() {
   const app = express();
@@ -234,6 +240,150 @@ Guidelines for your response:
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
+  }
+
+  // Set of Rule IDs with RED severity to observe key compliance triggers
+  const RED_RULE_IDS = new Set([
+    'AGM-001', 'AGM-002', 'AGM-004', 'AGM-005',
+    'INC-001', 'INC-003', 'INC-007', 'REG-002',
+    'TAX-001', 'TAX-003', 'TAX-008', 'TAX-010',
+    'AR-002', 'DIR-003', 'DIR-004', 'DIR-007',
+    'ESC-001', 'AUD-002', 'AUD-005', 'TR-006',
+    'ALT-001', 'ALT-002', 'BRD-003', 'SH-005'
+  ]);
+
+  function initCloudFunctionTrigger(firestoreDb: any) {
+    console.log("[Firebase Cloud Function] Background trigger listener for 'RED' compliance rules started...");
+    
+    let isInitialLoad = true;
+    
+    onSnapshot(collection(firestoreDb, "auditTrails"), async (snapshot: any) => {
+      // Skip processing documents during initial load to target new triggers specifically
+      if (isInitialLoad) {
+        isInitialLoad = false;
+        return;
+      }
+      
+      for (const change of snapshot.docChanges()) {
+        if (change.type === "added") {
+          const data = change.doc.data();
+          const ruleId = data.ruleId;
+          const isTriggered = data.action === 'triggered';
+          
+          if (isTriggered && RED_RULE_IDS.has(ruleId)) {
+            console.log(`[Firebase Cloud Function] ALERT: 'RED' severity rule ${ruleId} ("${data.ruleName}") triggered for company ${data.companyId}! Preparing notification summary...`);
+            
+            try {
+              // 1. Retrieve the company to look up its legal name and director email
+              const companyDocRef = doc(firestoreDb, "companies", data.companyId);
+              const companyDoc = await getDoc(companyDocRef);
+              
+              if (companyDoc.exists()) {
+                const companyData = companyDoc.data();
+                const companyName = companyData.name;
+                const directorEmail = companyData.directorEmail || `director@${companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`;
+                
+                console.log(`[Firebase Cloud Function] Recipient email for alert is: ${directorEmail}`);
+                
+                // 2. Draft a beautiful automated Swiss-style urgent statutory warning using Gemini-3.5-flash
+                const emailSubject = `🚨 IMMEDIATE ACTION REQUIRED: 'RED' Severity Compliance Default at ${companyName}`;
+                let emailBody = "";
+                
+                try {
+                  const ai = getAi();
+                  const prompt = `You are an automated corporate compliance officer robot acting as a background Firebase Cloud Function for Bangladesh local company statutory checks.
+                  
+                  An urgent 'RED' severity compliance default has been triggered for the company: "${companyName}".
+                  
+                  Default Details:
+                  - Rule Code: ${ruleId}
+                  - Rule Name: ${data.ruleName}
+                  - Trigger Time: ${data.timestamp}
+                  - Initiated By: ${data.username} (${data.role})
+                  - Compliance Comments: ${data.notes || "Emergency warnings issued."}
+                  
+                  Please draft a highly authoritative, immediate-action, corporate compliance email addressed directly to the Company Director at "${directorEmail}".
+                  Format:
+                  1. CLEAR STATUTORY WARNING: State that a critical regulatory violation occurred under local Bangladesh corporate laws and that it must be cured immediately.
+                  2. ASSOCIATED PENALTIES: Explain potential RJSC/NBR consequences (e.g. compounding fines, audit blocks, or public strike-off lists).
+                  3. TASK REMEDIAL PLAN: Detail 3 precise procedural steps (such as board validation meetings, physical registry updates, and form filing uploads) required on the dashboard to clear the warning badge.
+                  
+                  Respond in crisp, professional, clean markdown. Do not include flowery self-congratulations or standard preamble. Begin the email immediately.`;
+                  
+                  const aiResponse = await ai.models.generateContent({
+                    model: "gemini-3.5-flash",
+                    contents: prompt,
+                  });
+                  
+                  emailBody = aiResponse.text || `Dear Director of ${companyName},\n\nA 'RED' severity compliance default has occurred regarding rule ${data.ruleName} (${ruleId}).\n\nPlease resolve this immediately to prevent statutory RJSC fines and legal penalties.`;
+                } catch (err) {
+                  console.error("[Firebase Cloud Function] GenAI automated draft failed, using local reserve template:", err);
+                  emailBody = `Dear Director of ${companyName},\n\nThis is an automated legal compliance warning sent by the system's background Firebase Cloud Function trigger.
+                  
+A 'RED' severity compliance default has been registered under local Bangladesh corporate statutes:
+                  
+Rule Code: ${ruleId}
+Rule Title: ${data.ruleName}
+Recorded On: ${data.timestamp}
+Audit Link: ${data.id}
+
+PENALTIES & IMPLICATIONS:
+Under the Companies Act 1994, default to file required lists (e.g., Form XII, Form XI, or certified audits) on time leaves directors vulnerable to fines, filing bans, and risk of administrative strike-offs.
+
+REMEDIAL TASK WORKFLOW:
+1. Log into the local RJSC Compliance Admin Desk.
+2. Formulate and upload your certified documents synchronously.
+3. Mark the violation as cleared or request a manager override status on your dashboard.
+
+Sincerely,
+Automated Compliance Officer
+AFWA Vanguard Core.`;
+                }
+                
+                // 3. Persist the email log in Firestore collection 'sentEmails'
+                const emailLogId = "mail_" + Math.random().toString(36).substring(2, 9);
+                const emailLogDoc = {
+                  id: emailLogId,
+                  companyId: data.companyId,
+                  companyName: companyName,
+                  directorEmail: directorEmail,
+                  ruleId: ruleId,
+                  ruleName: data.ruleName,
+                  subject: emailSubject,
+                  body: emailBody,
+                  timestamp: new Date().toISOString()
+                };
+                
+                await setDoc(doc(firestoreDb, "sentEmails", emailLogId), emailLogDoc);
+                console.log(`[Firebase Cloud Function] Urgent compliance email successfully saved in sentEmails collection: ${emailLogId}. Sent email simulated to director address: ${directorEmail}`);
+              }
+            } catch (err) {
+              console.error("[Firebase Cloud Function] Error processing RED trigger email notification:", err);
+            }
+          }
+        }
+      }
+    }, (error: any) => {
+      console.error("[Firebase Cloud Function] Error on active snapshot listener:", error);
+    });
+  }
+
+  // Load Firebase config dynamically and start background trigger syncer
+  try {
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    if (fs.existsSync(configPath)) {
+      const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      const firebaseApp = initializeApp(firebaseConfig);
+      const firestoreDb = initializeFirestore(firebaseApp, {
+        experimentalForceLongPolling: true,
+      }, firebaseConfig.firestoreDatabaseId);
+      console.log(`[Firebase Cloud Function] Server-side Firebase App initialized dynamically.`);
+      initCloudFunctionTrigger(firestoreDb);
+    } else {
+      console.warn("[Firebase Cloud Function] Warning: firebase-applet-config.json is absent. Background triggers remain inactive.");
+    }
+  } catch (firebaseInitErr) {
+    console.error("[Firebase Cloud Function] Error initializing server-side Firebase trigger:", firebaseInitErr);
   }
 
   app.listen(PORT, "0.0.0.0", () => {
