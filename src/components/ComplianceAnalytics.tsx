@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Company, Rule } from '../types';
-import { COMPLIANCE_RULES } from '../data/rules';
+import { COMPLIANCE_RULES, MOCK_COMPANIES } from '../data/rules';
 import { 
   Building, Calendar, TrendingUp, ShieldAlert, CheckCircle2, AlertTriangle, 
   ChevronRight, BrainCircuit, Sparkles, Filter, Info, ArrowUpRight, Check, Play, Settings
@@ -13,10 +13,12 @@ import {
 
 interface ComplianceAnalyticsProps {
   selectedCompany: Company;
+  allCompanies?: Company[];
 }
 
-export default function ComplianceAnalytics({ selectedCompany }: ComplianceAnalyticsProps) {
+export default function ComplianceAnalytics({ selectedCompany, allCompanies = [] }: ComplianceAnalyticsProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [benchmarkMetric, setBenchmarkMetric] = useState<'health' | 'penalty'>('health');
   
   // Simulation switches: Key actionable issues currently triggered
   // We can let the user simulate what happens when they resolve them!
@@ -225,6 +227,130 @@ export default function ComplianceAnalytics({ selectedCompany }: ComplianceAnaly
       .sort((a, b) => b.points - a.points)
       .slice(0, 4);
   }, [activeTriggeredRules, resolvedIssues]);
+
+  // Helper list of Peer Companies (all companies from Firestore or fallback, minus the selected company)
+  const fallbackCompanies = useMemo(() => {
+    const list = (allCompanies && allCompanies.length > 0) ? allCompanies : MOCK_COMPANIES;
+    return list.filter(c => c.id !== selectedCompany.id);
+  }, [allCompanies, selectedCompany.id]);
+
+  // Industry average of peers' health score
+  const industryAvgHealth = useMemo(() => {
+    if (fallbackCompanies.length === 0) return 100;
+    const total = fallbackCompanies.reduce((acc, comp) => {
+      let score = 0;
+      COMPLIANCE_RULES.forEach(rule => {
+        if (rule.evaluate(comp).triggered) {
+          score += rule.points;
+        }
+      });
+      const health = Math.max(0, Math.min(100, Math.round(100 - (score * 0.4))));
+      return acc + health;
+    }, 0);
+    return Math.round(total / fallbackCompanies.length);
+  }, [fallbackCompanies]);
+
+  const currentHealth = stats.simHealth;
+  const healthDifference = currentHealth - industryAvgHealth;
+  const outperforming = healthDifference >= 0;
+
+  // Percentile Standing calculation (dynamic based on sandbox simulations!)
+  const percentileStanding = useMemo(() => {
+    const allHealths = fallbackCompanies.map(comp => {
+      let score = 0;
+      COMPLIANCE_RULES.forEach(rule => {
+        if (rule.evaluate(comp).triggered) {
+          score += rule.points;
+        }
+      });
+      return Math.max(0, Math.min(100, Math.round(100 - (score * 0.4))));
+    });
+    allHealths.push(currentHealth);
+    
+    // Sort healths ascending
+    allHealths.sort((a, b) => a - b);
+    
+    // Find index of current company's health
+    const rankIndex = allHealths.indexOf(currentHealth);
+    const percentile = Math.round((rankIndex / (allHealths.length - 1 || 1)) * 100);
+    return percentile;
+  }, [fallbackCompanies, currentHealth]);
+
+  // Dynamic monthly historical comparison data 
+  const monthlyBenchmarkingData = useMemo(() => {
+    const months = [
+      'Jul 25', 'Aug 25', 'Sep 25', 'Oct 25', 'Nov 25', 'Dec 25',
+      'Jan 26', 'Feb 26', 'Mar 26', 'Apr 26', 'May 26', 'Jun 26'
+    ];
+    
+    const selectedCompanySeed = selectedCompany.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    
+    // Evaluate other companies' trends dynamically
+    const otherCompaniesTrends = fallbackCompanies.map(comp => {
+      const compSeed = comp.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const trend = [];
+      for (let i = 0; i < 12; i++) {
+        let monthScore = 0;
+        COMPLIANCE_RULES.forEach((rule, idx) => {
+          const evaluation = rule.evaluate(comp);
+          if (evaluation.triggered) {
+            const triggerStagger = (compSeed + idx * 17) % 12;
+            if (triggerStagger <= i) {
+              monthScore += rule.points;
+            }
+          }
+        });
+        monthScore = Math.max(0, monthScore);
+        const monthHealth = Math.max(0, Math.min(100, Math.round(100 - (monthScore * 0.4))));
+        trend.push({ score: monthScore, health: monthHealth });
+      }
+      return trend;
+    });
+
+    // Compile combined data
+    return months.map((month, i) => {
+      let selectedMonthScore = 0;
+      COMPLIANCE_RULES.forEach((rule, idx) => {
+        const evaluation = rule.evaluate(selectedCompany);
+        if (evaluation.triggered) {
+          const triggerStagger = (selectedCompanySeed + idx * 17) % 12;
+          if (triggerStagger <= i) {
+            const isSimulatedResolved = resolvedIssues[rule.id] === true;
+            if (!isSimulatedResolved) {
+              selectedMonthScore += rule.points;
+            }
+          }
+        }
+      });
+      selectedMonthScore = Math.max(0, selectedMonthScore);
+      const selectedMonthHealth = Math.max(0, Math.min(100, Math.round(100 - (selectedMonthScore * 0.4))));
+
+      let totalOtherScore = 0;
+      let totalOtherHealth = 0;
+      const count = otherCompaniesTrends.length || 1;
+
+      otherCompaniesTrends.forEach(trend => {
+        if (trend[i]) {
+          totalOtherScore += trend[i].score;
+          totalOtherHealth += trend[i].health;
+        } else {
+          totalOtherScore += 0;
+          totalOtherHealth += 100;
+        }
+      });
+
+      const avgOtherScore = Math.round((totalOtherScore / count) * 10) / 10;
+      const avgOtherHealth = Math.round((totalOtherHealth / count) * 10) / 10;
+
+      return {
+        name: month,
+        'Your Health': selectedMonthHealth,
+        'Your Penalty': selectedMonthScore,
+        'Industry Avg Health': avgOtherHealth,
+        'Industry Avg Penalty': avgOtherScore,
+      };
+    });
+  }, [selectedCompany, fallbackCompanies, resolvedIssues]);
 
   return (
     <div className="space-y-6" id="compliance-analytics-workspace">
@@ -532,6 +658,181 @@ export default function ComplianceAnalytics({ selectedCompany }: ComplianceAnaly
           </div>
         </div>
 
+      </div>
+
+      {/* Industry Peer Benchmark Dashboard */}
+      <div className="bg-slate-900 border border-slate-850 p-6 rounded-2xl text-left space-y-6" id="industry-benchmark-dashboard">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-teal-500/10 text-teal-300 border border-teal-500/20 uppercase tracking-widest font-black">
+                Industry Benchmarking
+              </span>
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-slate-800 text-slate-300 border border-slate-700 font-bold">
+                N = {fallbackCompanies.length + 1} Companies Evaluated
+              </span>
+            </div>
+            <h3 className="text-base font-bold text-white font-sans flex items-center gap-2">
+              <Building className="w-4 h-4 text-teal-400" />
+              Anonymous Private Limited Peer Comparison
+            </h3>
+            <p className="text-xs text-slate-400 font-mono">
+              Compare your compliance health and accumulated RJSC risks against the real-time average of other Private Limited Companies registered in this system.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-850 self-start md:self-center">
+            <button
+              onClick={() => setBenchmarkMetric('health')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer ${
+                benchmarkMetric === 'health'
+                  ? 'bg-teal-500 text-slate-950 font-bold'
+                  : 'text-slate-400 hover:text-slate-250'
+              }`}
+            >
+              Compliance Health %
+            </button>
+            <button
+              onClick={() => setBenchmarkMetric('penalty')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer ${
+                benchmarkMetric === 'penalty'
+                  ? 'bg-indigo-500 text-white font-bold'
+                  : 'text-slate-400 hover:text-slate-250'
+              }`}
+            >
+              Penalty Points
+            </button>
+          </div>
+        </div>
+
+        {/* Bento Comparison Sub-metrics grids */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Peer card 1: Score compare */}
+          <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl flex flex-col justify-between space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wide font-bold">Benchmark Spread</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-md font-mono ${outperforming ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                {outperforming ? 'Above Peer Avg' : 'Below Peer Avg'}
+              </span>
+            </div>
+            <div>
+              <div className="text-2xl font-black text-white flex items-baseline gap-1">
+                <span>{Math.abs(healthDifference)}%</span>
+                <span className="text-xs text-slate-400 font-normal">
+                  {outperforming ? 'higher than' : 'lower than'} peers
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 font-mono mt-1">
+                Peer avg health: <strong className="text-slate-350">{industryAvgHealth}%</strong> | Yours: <strong className="text-slate-350">{currentHealth}%</strong>
+              </p>
+            </div>
+          </div>
+
+          {/* Peer card 2: Percentile Rank */}
+          <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl flex flex-col justify-between space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-mono text-slate-505 uppercase tracking-wide font-bold">Percentile Ranking</span>
+              <span className="text-[10px] px-2 py-0.5 bg-indigo-500/10 text-indigo-400 rounded-md font-mono">Dynamic Standings</span>
+            </div>
+            <div>
+              <div className="text-2xl font-black text-white flex items-baseline gap-1">
+                <span>{percentileStanding}th</span>
+                <span className="text-xs text-slate-400 font-normal">Percentile</span>
+              </div>
+              <p className="text-[10px] text-slate-500 font-mono mt-1">
+                Outperforming <strong className="text-slate-350">{percentileStanding}%</strong> of audited private limited companies in the system.
+              </p>
+            </div>
+          </div>
+
+          {/* Peer card 3: Dynamic sandbox impact */}
+          <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl flex flex-col justify-between space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-mono text-slate-505 uppercase tracking-wide font-bold">Sandbox Index Boost</span>
+              <span className="text-[10px] px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-md font-mono font-bold">Target Gain</span>
+            </div>
+            <div>
+              <div className="text-2xl font-black text-emerald-400">
+                +{currentHealth - stats.actualHealth}%
+              </div>
+              <p className="text-[10px] text-slate-500 font-mono mt-1">
+                Applying simulated actions raised company standing by <strong className="text-emerald-400">{currentHealth - stats.actualHealth}%</strong> points.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Comparative overlay graph */}
+        <div className="h-[300px] w-full bg-slate-950/40 p-4 border border-slate-850 rounded-xl relative overflow-hidden" id="peer-average-overlay-graph">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={monthlyBenchmarkingData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gradientYourHealth" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={benchmarkMetric === 'health' ? '#14b8a6' : '#6366f1'} stopOpacity={0.25}/>
+                  <stop offset="95%" stopColor={benchmarkMetric === 'health' ? '#14b8a6' : '#6366f1'} stopOpacity={0}/>
+                </linearGradient>
+                <linearGradient id="gradientPeerHealth" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.1}/>
+                  <stop offset="95%" stopColor="#94a3b8" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+              <XAxis 
+                dataKey="name" 
+                stroke="#64748b" 
+                fontSize={10} 
+                fontFamily="JetBrains Mono, monospace" 
+              />
+              <YAxis 
+                stroke="#64748b" 
+                fontSize={10} 
+                fontFamily="JetBrains Mono, monospace"
+                domain={benchmarkMetric === 'health' ? [0, 100] : [0, 'auto']}
+                label={{ 
+                  value: benchmarkMetric === 'health' ? 'Compliance Health %' : 'Penalty Risk Score (Pts)', 
+                  angle: -90, 
+                  position: 'insideLeft', 
+                  style: { fill: '#64748b', fontSize: 10, fontFamily: 'monospace' } 
+                }}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#020617',
+                  borderColor: '#334155',
+                  borderRadius: '12px',
+                  fontFamily: 'JetBrains Mono, monospace',
+                  fontSize: '11px',
+                  color: '#f8fafc'
+                }}
+              />
+              <Legend 
+                verticalAlign="top" 
+                height={36} 
+                wrapperStyle={{ fontSize: '11px', fontFamily: 'monospace' }}
+              />
+              <Area 
+                type="monotone" 
+                name={benchmarkMetric === 'health' ? 'Your Health %' : 'Your Penalty Risk (Pts)'}
+                dataKey={benchmarkMetric === 'health' ? 'Your Health' : 'Your Penalty'} 
+                stroke={benchmarkMetric === 'health' ? '#14b8a6' : '#6366f1'} 
+                strokeWidth={2.5}
+                activeDot={{ r: 6 }}
+                fillOpacity={1} 
+                fill="url(#gradientYourHealth)" 
+              />
+              <Area 
+                type="monotone" 
+                name={benchmarkMetric === 'health' ? 'Industry Avg Health %' : 'Industry Avg Penalty (Pts)'}
+                dataKey={benchmarkMetric === 'health' ? 'Industry Avg Health' : 'Industry Avg Penalty'} 
+                stroke="#94a3b8" 
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                fillOpacity={1} 
+                fill="url(#gradientPeerHealth)" 
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       {/* Interactive Simulation Sandbox and AI recommendations briefing */}

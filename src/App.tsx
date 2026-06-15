@@ -785,7 +785,7 @@ export default function App() {
                   />
                 )}
                 {activeTab === 'analytics' && (
-                  <ComplianceAnalytics selectedCompany={selectedCompany} />
+                  <ComplianceAnalytics selectedCompany={selectedCompany} allCompanies={companies} />
                 )}
                 {activeTab === 'emails' && (
                   <DirectorEmailLogs 
