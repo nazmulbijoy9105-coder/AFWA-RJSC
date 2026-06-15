@@ -45,7 +45,7 @@ service cloud.firestore {
 
     // Companies Collection Rules
     match /companies/{companyId} {
-      allow read: if isSignedIn();
+      allow read: if true; // Allow client and server-side background triggered officer to read company lists
       allow create: if isSignedIn() && isValidId(companyId);
       allow update: if isSignedIn() && isValidId(companyId);
       allow delete: if isSignedIn(); // Allow delete to allow company pruning in app
@@ -53,7 +53,7 @@ service cloud.firestore {
 
     // Audit Trails Collection Rules (Immutable Logs except Purging)
     match /auditTrails/{trailId} {
-      allow read: if isSignedIn();
+      allow read: if true; // Allow client and server-side background triggered worker to watch/fetch compliance registries
       allow create: if isSignedIn() && isValidId(trailId);
       allow update: if false; // Strict Rule: Immutable History
       allow delete: if isSignedIn(); // Allow deletion for active reset-db operations
@@ -67,8 +67,8 @@ service cloud.firestore {
 
     // Sent Emails Collection Rules
     match /sentEmails/{emailId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isValidId(emailId);
+      allow read: if true; // Allow client and server to read dispatched compliance lists
+      allow write: if isValidId(emailId); // Allow server-side triggers to record compliance logging
     }
   }
 }
