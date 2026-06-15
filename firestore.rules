@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Catch-all Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Hardy Reusable Global helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Role-Based Access: Check if user document has admin role
+    function isAdmin() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Users Collection Rules
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Companies Collection Rules
+    match /companies/{companyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(companyId);
+      allow update: if isSignedIn() && isValidId(companyId);
+      allow delete: if isSignedIn(); // Allow delete to allow company pruning in app
+    }
+
+    // Audit Trails Collection Rules (Immutable Logs except Purging)
+    match /auditTrails/{trailId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(trailId);
+      allow update: if false; // Strict Rule: Immutable History
+      allow delete: if isSignedIn(); // Allow deletion for active reset-db operations
+    }
+
+    // Bypassed Rules Collection Rules
+    match /bypassedRules/{companyId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidId(companyId);
+    }
+  }
+}

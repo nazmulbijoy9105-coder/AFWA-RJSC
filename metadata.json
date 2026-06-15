@@ -1,0 +1,6 @@
+{
+  "name": "AFWA RJSC Sentinel",
+  "description": "Enterprise-grade compliance engine & recurring filing tracker for Private Limited Companies and Law Firms under Bangladesh Companies Act 1994.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

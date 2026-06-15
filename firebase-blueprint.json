@@ -1,0 +1,151 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account registration details and roles",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "compliance_officer", "spectator"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "Registered company entity and its current compliance parameter states under the Companies Act 1994",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "regNumber": { "type": "string" },
+        "incorporationDate": { "type": "string" },
+        "authorizedCapital": { "type": "integer" },
+        "paidUpCapital": { "type": "integer" },
+        "totalDirectors": { "type": "integer" },
+        "totalMembers": { "type": "integer" },
+        "totalBoardMeetings": { "type": "integer" },
+        "foreignShareholding": { "type": "boolean" },
+        "remittanceValue": { "type": "integer" },
+        "workPermitThresholdMet": { "type": "boolean" },
+        "registersKeptAtRegisteredOffice": { "type": "boolean" },
+        "registersIncomplete": { "type": "boolean" },
+        "coreRegistersMissing": { "type": "boolean" },
+        "registerOfLoansOrMortgagesMissing": { "type": "boolean" },
+        "hasUnregisteredCharge": { "type": "boolean" },
+        "chargeSatisfactionNotFiled": { "type": "boolean" },
+        "registeredOfficeChanged": { "type": "boolean" },
+        "registeredOfficeChangedFiledWithin28Days": { "type": "boolean" },
+        "boardResolutionsNotRecorded": { "type": "boolean" },
+        "egmHeld": { "type": "boolean" },
+        "egmNoticeDays": { "type": "integer" },
+        "agmHeldInCurrentFY": { "type": "boolean" },
+        "isFirstAGM: ": { "type": "boolean" },
+        "daysSinceIncorporation": { "type": "integer" },
+        "monthsSinceIncorporation": { "type": "integer" },
+        "firstAgmDefault": { "type": "boolean" },
+        "subsequentAgmDefault: ": { "type": "boolean" },
+        "agmNoticeDays": { "type": "integer" },
+        "agmQuorumMet": { "type": "boolean" },
+        "agmMinutesPrepared": { "type": "boolean" },
+        "auditorReappointedAtAGM": { "type": "boolean" },
+        "auditorAppointedWithin30Days": { "type": "boolean" },
+        "auditorIsEmployeeOrOfficer": { "type": "boolean" },
+        "auditCompletedBeforeAGM": { "type": "boolean" },
+        "agmHeldWithoutCompletedAudit": { "type": "boolean" },
+        "annualReturnFiled": { "type": "boolean" },
+        "annualReturnIncomplete": { "type": "boolean" },
+        "annualReturnBacklogYears": { "type": "integer" },
+        "directorAppointmentNotFiled14Days": { "type": "boolean" },
+        "directorDepartureNotFiled14Days": { "type": "boolean" },
+        "directorConsentNotFiled": { "type": "boolean" },
+        "directorMajorFilingIrregularityOver1Year": { "type": "boolean" },
+        "directorDisqualifiedAppointed": { "type": "boolean" },
+        "directorInterestInContractDisclosed": { "type": "boolean" },
+        "shareAllotmentFiledWithin30Days": { "type": "boolean" },
+        "shareCertificatesIssuedWithin60Days": { "type": "boolean" },
+        "capitalIncreaseFiledWithin30Days": { "type": "boolean" },
+        "sharesAllottedAtDiscount": { "type": "boolean" },
+        "sweatEquityBonusWithoutResolution": { "type": "boolean" },
+        "shareTransferNoForm117": { "type": "boolean" },
+        "stampDutyNotPaidOnTransfer": { "type": "boolean" },
+        "shareTransferNoBoardApproval": { "type": "boolean" },
+        "shareTransferViolatesAoARestriction": { "type": "boolean" },
+        "registerMembersNotUpdatedAfterTransfer": { "type": "boolean" },
+        "altNameNotRegistered": { "type": "boolean" },
+        "altMoAAoANotFiled": { "type": "boolean" },
+        "altReductionWithoutCourt": { "type": "boolean" },
+        "tinObtained": { "type": "boolean" },
+        "taxReturnFiled": { "type": "boolean" },
+        "advanceTaxQ1Paid": { "type": "boolean" },
+        "advanceTaxQ2Paid": { "type": "boolean" },
+        "advanceTaxQ3Paid": { "type": "boolean" },
+        "advanceTaxQ4Paid": { "type": "boolean" },
+        "tdsDepositedUpToDate": { "type": "boolean" },
+        "wealthStatementFiled": { "type": "boolean" },
+        "tradeLicenseActive": { "type": "boolean" },
+        "vatRegistered": { "type": "boolean" },
+        "vatMonthlyReturnsFiled": { "type": "boolean" },
+        "vatAnnualReturnFiled": { "type": "boolean" },
+        "outwardForeignRemittanceNoDocs": { "type": "boolean" },
+        "strikeOffNoticeReceived": { "type": "boolean" },
+        "strikeOffListPublished": { "type": "boolean" },
+        "showCauseNoticeReceived": { "type": "boolean" },
+        "strikeOffImminent": { "type": "boolean" },
+        "corporateRescueMandatory": { "type": "boolean" },
+        "specialResolutionNotFiled": { "type": "boolean" },
+        "capitalAlterationWithoutResolution": { "type": "boolean" },
+        "notes": { "type": "string" },
+        "adminNotes": { "type": "string" }
+      },
+      "required": ["id", "name", "regNumber"]
+    },
+    "AuditTrailEntry": {
+      "title": "AuditTrailEntry",
+      "description": "Chronological audit trail entry detailing system and user compliance changes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "ruleId": { "type": "string" },
+        "ruleName": { "type": "string" },
+        "action": { "type": "string", "enum": ["triggered", "acknowledged", "cleared"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "username": { "type": "string" },
+        "role": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "companyId", "ruleId", "action", "timestamp", "username"]
+    },
+    "BypassedRules": {
+      "title": "BypassedRules",
+      "description": "Record mapping company ID to bypass / override compliance exception rule lists",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "bypassedRuleIds": { "type": "array" }
+      },
+      "required": ["companyId", "bypassedRuleIds"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Profiles for registered compliance managers and officers"
+    },
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Corporate entities being monitored for statutory adherence"
+    },
+    "/auditTrails/{trailId}": {
+      "schema": "AuditTrailEntry",
+      "description": "Comprehensive corporate audit actions logs log"
+    },
+    "/bypassedRules/{companyId}": {
+      "schema": "BypassedRules",
+      "description": "Waivers or administrative overrides active for standard compliance limits"
+    }
+  }
+}
